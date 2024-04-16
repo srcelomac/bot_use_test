@@ -6,6 +6,7 @@ import json
 from telebot import *
 import string
 import sqlite3
+import math
 
 bot = telebot.TeleBot('7196357802:AAHsMTbnuQiDM4ahfAtZihk8gU83mxPP58M')
 
@@ -27,6 +28,14 @@ cur.execute('CREATE TABLE IF NOT EXISTS Tasks (id INTEGER PRIMARY KEY AUTOINCREM
 conn.commit()
 cur.close()
 conn.close()
+
+conn = sqlite3.connect('stats.db')
+cur = conn.cursor()
+cur.execute('CREATE TABLE IF NOT EXISTS Stats (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, user_id INTEGER UNIQUE, rights INTEGER DEFAULT 0, wrongs INTEGER DEFAULT 0)')
+conn.commit()
+cur.close()
+conn.close()
+
 
 task_id = 0
 
@@ -234,18 +243,7 @@ task_4 = [
     ['надолго', 'надОлго'],
     ['ненадолго', 'ненадОлго']
 ]
-task_9 = []
-tasks = {
-    4: {'words': ['аэропорты', 'банты', 'бороду'], 'answers': ['аэропОрт', 'бАнты', 'бОроду']},
-    9: {'words': [], 'answers': []},
-    10: {'words': [], 'answers': []},
-    11: {'words': [], 'answers': []},
-    12: {'words': [], 'answers': []},
-    13: {'words': [], 'answers': []},
-    14: {'words': [], 'answers': []},
-    15: {'words': [], 'answers': []}
-}
-#print(task_4[0][0])
+
 
 def diff_letters(a,b):
     return sum (a[i] != b[i] for i in range(min(len(a), len(b))))
@@ -293,7 +291,7 @@ def req_gptshka(mes):
 
 def subject_selection(subject: str):
     body = {
-        "modelUri": f"gpt://{yandex_cloud_catalog}/{"yandexgpt-lite"}",
+        "modelUri": f"gpt://{yandex_cloud_catalog}/{yandexgpt-lite}",
         "completionOptions": {"stream": False, "temperature": 0.1, "maxTokens": "2000"},
         "messages": [
             {"role": "system", "text": system_prompt},
@@ -412,6 +410,12 @@ def training_4(message):
         elif (message.text[1::] == task_4[step-1][1][1::]):
             bot.send_message(message.chat.id, "Верно!")
             answer_true += 1
+            conn = sqlite3.connect('stats.db')
+            cur = conn.cursor()
+            sqlite_select_query = f"""UPDATE Stats SET rights = rigths + 1 where user_id = {message.chat.id}"""
+            cur.execute(sqlite_select_query)
+            cur.close()
+            conn.close()
             if (step >= len(task_4)):
                 step = 0
                 markup = types.ReplyKeyboardMarkup()
@@ -437,6 +441,12 @@ def training_4(message):
             bot.send_message(message.chat.id,
                              f'Неверно! \nПравильный ответ: {task_4[step - 1][1]}')
             answer_false += 1
+            conn = sqlite3.connect('stats.db')
+            cur = conn.cursor()
+            sqlite_select_query = f"""UPDATE Stats SET wrongs = wrongs + 1 where user_id = {message.chat.id}"""
+            cur.execute(sqlite_select_query)
+            cur.close()
+            conn.close()
             if (step >= len(task_4)):
                 step = 0
                 markup = types.ReplyKeyboardMarkup()
@@ -455,6 +465,147 @@ def training_4(message):
                 step += 1
                 #print("no")
                 bot.register_next_step_handler(message, training_4)
+
+task_words = []
+
+@bot.message_handler()
+def training(message):
+    global task_id
+    global step
+    global answer_true
+    global answer_false
+    global task_words
+    if (step == 0):
+        if (message.text.lower() == "стоп" or message.text == "Стоп"):
+            # main_menu(message)
+            # print("Выход")
+            # bot.register_next_step_handler(message, main_menu)
+            step = 0
+            task_id = 0
+            task_words = []
+            markup = types.ReplyKeyboardMarkup()
+            btn1 = types.KeyboardButton('Тренировка')
+            btn2 = types.KeyboardButton('Моя статистика')
+            btn3 = types.KeyboardButton('Добавить слово')
+            markup.row(btn1, btn2, btn3)
+            bot.send_message(message.chat.id,
+                             f'Ты сделал верно {answer_true} из {answer_true + answer_false} заданий. Что-то ещё?',
+                             reply_markup=markup)
+            answer_true = 0
+            answer_false = 0
+            bot.register_next_step_handler(message, on_click)
+        else:
+            conn = sqlite3.connect('tasks.db')
+            cur = conn.cursor()
+            sqlite_select_query = f"""SELECT words from Tasks where (user_id = {message.chat.id} and task_id = {task_id})"""
+            cur.execute(sqlite_select_query)
+            # cur.execute(f"SELECT words * FROM Tasks * WHERE user_id = {message.chat.id}")
+            list_of_words = cur.fetchall()
+            sqlite_select_query = f"""SELECT answers from Tasks where (user_id = {message.chat.id} and task_id = {task_id})"""
+            cur.execute(sqlite_select_query)
+            list_of_answers = cur.fetchall()
+            cur.close()
+            conn.close()
+            for i in range(len(list_of_words)):
+                s1 = str(list_of_words[i])
+                s1 = s1.replace('(', '')
+                s1 = s1.replace(')', '')
+                s1 = s1.replace("'", '')
+                s1 = s1.replace(',', '')
+                s2 = str(list_of_answers[i])
+                s2 = s2.replace('(', '')
+                s2 = s2.replace(')', '')
+                s2 = s2.replace("'", '')
+                s2 = s2.replace(',', '')
+                task_words.append([s1, s2])
+                print(s1)
+                print(s2)
+            print(task_words)
+            random.shuffle(task_words)
+            markup = types.ReplyKeyboardMarkup()
+            btn_stop = types.KeyboardButton('Стоп')
+            markup.row(btn_stop)
+            bot.send_message(message.chat.id, task_words[step][0], reply_markup=markup)
+            step += 1
+            bot.register_next_step_handler(message, training)
+    elif (step > 0):
+        if ((message.text).lower() == "стоп" or message.text == "Стоп"):
+            # main_menu(message)
+            # print("Выход")
+            # bot.register_next_step_handler(message, main_menu)
+            step = 0
+            task_id = 0
+            task_words = []
+            markup = types.ReplyKeyboardMarkup()
+            btn1 = types.KeyboardButton('Тренировка')
+            btn2 = types.KeyboardButton('Моя статистика')
+            btn3 = types.KeyboardButton('Добавить слово')
+            markup.row(btn1, btn2, btn3)
+            bot.send_message(message.chat.id,
+                             f'Ты сделал верно {answer_true} из {answer_true + answer_false} заданий. Что-то ещё?',
+                             reply_markup=markup)
+            answer_true = 0
+            answer_false = 0
+            bot.register_next_step_handler(message, on_click)
+        elif (message.text[1::] == task_words[step - 1][1][1::]):
+            bot.send_message(message.chat.id, "Верно!")
+            answer_true += 1
+            conn = sqlite3.connect('stats.db')
+            cur = conn.cursor()
+            sqlite_select_query = f"""UPDATE Stats SET rights = rights + 1 where user_id = {message.chat.id}"""
+            cur.execute(sqlite_select_query)
+            cur.close()
+            conn.close()
+            if (step >= len(task_words)):
+                step = 0
+                markup = types.ReplyKeyboardMarkup()
+                btn1 = types.KeyboardButton('Тренировка')
+                btn2 = types.KeyboardButton('Моя статистика')
+                btn3 = types.KeyboardButton('Добавить слово')
+                markup.row(btn1, btn2, btn3)
+                bot.send_message(message.chat.id,
+                                 f'Слова закончились. Ты молодец!\n Ты сделал верно {answer_true} из {answer_true + answer_false} заданий.',
+                                 reply_markup=markup)
+                answer_true = 0
+                answer_false = 0
+                bot.register_next_step_handler(message, on_click)
+            else:
+                bot.send_message(message.chat.id, task_words[step][0])
+                step += 1
+                # print('yep')
+                bot.register_next_step_handler(message, training)
+        else:
+            # answer = req_gptshka(task_4[step-1][1])
+            # answer = subject_selection(message.text)
+            # bot.send_message(message.chat.id, f'Неверно! \nПравильный ответ: {task_4[step-1][1]} \nПопробуй запомнить так: {answer}')
+            bot.send_message(message.chat.id,
+                             f'Неверно! \nПравильный ответ: {task_words[step - 1][1]}')
+            answer_false += 1
+            conn = sqlite3.connect('stats.db')
+            cur = conn.cursor()
+            sqlite_select_query = f"""UPDATE Stats SET wrongs = wrongs + 1 where user_id = {message.chat.id}"""
+            cur.execute(sqlite_select_query)
+            cur.close()
+            conn.close()
+            if (step >= len(task_words)):
+                step = 0
+                markup = types.ReplyKeyboardMarkup()
+                btn1 = types.KeyboardButton('Тренировка')
+                btn2 = types.KeyboardButton('Моя статистика')
+                btn3 = types.KeyboardButton('Добавить слово')
+                markup.row(btn1, btn2, btn3)
+                bot.send_message(message.chat.id,
+                                 f'Слова закончились. Ты молодец!\nТы сделал верно {answer_true} из {answer_true + answer_false} заданий.',
+                                 reply_markup=markup)
+                answer_true = 0
+                answer_false = 0
+                bot.register_next_step_handler(message, on_click)
+            else:
+                bot.send_message(message.chat.id, task_words[step][0])
+                step += 1
+                # print("no")
+                bot.register_next_step_handler(message, training)
+
 
 flag_add = False
 word_was = False
@@ -537,7 +688,20 @@ def on_click(message):
         bot.send_message(message.chat.id, f'Каким заданием хочешь заняться?', reply_markup=markup)
         bot.register_next_step_handler(message, on_click_task)
     elif message.text == 'Моя статистика':
-        print('стата')
+        conn = sqlite3.connect('stats.db')
+        cur = conn.cursor()
+        sqlite_select_query = f"""SELECT rights from Stats where user_id = {message.chat.id}"""
+        cur.execute(sqlite_select_query)
+        right = cur.fetchall()
+        sqlite_select_query = f"""SELECT wrongs from Stats where user_id = {message.chat.id}"""
+        cur.execute(sqlite_select_query)
+        wrong = cur.fetchall()
+        print(right)
+        print(wrong)
+        cur.close()
+        conn.close()
+        bot.send_message(message.chat.id,
+                         f'Ты сделал верно {right} из {right + wrong} заданий ({math.ceil(right/(right+wrong)*100)}%). Что-то ещё?')
     elif message.text == 'Добавить слово':
         markup = types.ReplyKeyboardMarkup()
         btn_task9 = types.KeyboardButton('9')
@@ -552,9 +716,14 @@ def on_click(message):
         bot.register_next_step_handler(message, on_click_task_add)
 
 def on_click_task(message):
+    global task_id
     if (message.text == '4'):
         #print('*')
         training_4(message)
+    else:
+        task_id = int(message.text)
+        training(message)
+
 
 def on_click_task_add(message):
     global task_id
