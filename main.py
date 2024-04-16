@@ -375,7 +375,7 @@ def training_4(message):
             markup = types.ReplyKeyboardMarkup()
             btn_stop = types.KeyboardButton('Стоп')
             markup.row(btn_stop)
-            bot.send_message(message.chat.id, "Букву, на которую падает ударение, выдели Заглавной (бАнты) \nКогда решишь прекратить, нажми на клавиатуре или напиши сам слово Стоп")
+            bot.send_message(message.chat.id, "Букву, на которую падает ударение, выдели Заглавной (бАнты) \nКогда решишь прекратить, нажми на клавиатуре или напиши слово Стоп")
             bot.send_message(message.chat.id, task_4[step][0], reply_markup=markup)
             step += 1
             bot.register_next_step_handler(message, training_4)
