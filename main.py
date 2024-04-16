@@ -245,8 +245,9 @@ task_4 = [
 ]
 
 
+
 def diff_letters(a,b):
-    return sum (a[i] != b[i] for i in range(min(len(a), len(b))))
+    return sum(a[i] != b[i] for i in range(min(len(a), len(b))))
 
 def req_gptshka(mes):
     global system_prompt
@@ -272,7 +273,7 @@ def req_gptshka(mes):
 
     response = requests.post(url, headers=headers, json=body)
     response_json = json.loads(response.text)
-    print(response_json)
+    #print(response_json)
     operation_id = response_json["id"]
     url = f"https://llm.api.cloud.yandex.net/operations/{operation_id}"
     headers = {"Authorization": f"Api-Key {yandex_api_key}"}
@@ -289,44 +290,6 @@ def req_gptshka(mes):
     answer = response_json["response"]["alternatives"][0]["message"]["text"]
     return answer
 
-def subject_selection(subject: str):
-    body = {
-        "modelUri": f"gpt://{yandex_cloud_catalog}/{yandexgpt-lite}",
-        "completionOptions": {"stream": False, "temperature": 0.1, "maxTokens": "2000"},
-        "messages": [
-            {"role": "system", "text": system_prompt},
-            {"role": "user", "text": subject},
-        ],
-    }
-
-    url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completionAsync"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Api-Key {yandex_gpt_api_key}",
-        "x-folder-id": yandex_cloud_catalog,
-    }
-
-    response = requests.post(url, headers=headers, json=body)
-    response_json = json.loads(response.text)
-    operation_id = response_json["id"]
-
-    url = f"https://llm.api.cloud.yandex.net/operations/{operation_id}"
-    headers = {"Authorization": f"Api-Key {yandex_gpt_api_key}"}
-
-    done = False
-    while not done:
-        response = requests.get(url, headers=headers)
-        response_json = json.loads(response.text)
-        done = response_json["done"]
-        time.sleep(0.1)
-
-    if response.status_code != 200:
-        return "ERROR"
-
-    answer = response_json["response"]["alternatives"][0]["message"]["text"]
-
-    return answer
-
 
 @bot.message_handler(commands=['start'])
 def main(message):
@@ -336,6 +299,22 @@ def main(message):
     btn3 = types.KeyboardButton('Добавить слово')
     markup.row(btn1, btn2, btn3)
     bot.send_message(message.chat.id, f'Привет, {message.from_user.first_name}!', reply_markup=markup)
+    conn = sqlite3.connect('stats.db')
+    cur = conn.cursor()
+    cur.execute(f'SELECT COUNT (*) from Stats where user_id = {message.chat.id}')
+    tmp = str(cur.fetchall()[0])
+    tmp = tmp.replace('(', '')
+    tmp = tmp.replace(')', '')
+    tmp = tmp.replace("'", '')
+    tmp = tmp.replace(',', '')
+    #print(tmp)
+    cnt = int(tmp)
+    if (cnt == 0):
+        cur.execute('INSERT INTO Stats (user_id, rights, wrongs) VALUES (?, ?, ?)',
+                    (message.chat.id, 0, 0))
+    conn.commit()
+    cur.close()
+    conn.close()
     bot.register_next_step_handler(message, on_click)
 
 @bot.message_handler(commands=['admin'])
@@ -369,7 +348,7 @@ def training_4(message):
     global yandex_cloud_catalog
     #print(step)
     if (step == 0):
-        if (message.text.lower() == "стоп" or message.text == "Стоп"):
+        if (message.text.lower() == "стоп" or message.text.strip() == "Стоп"):
             #main_menu(message)
             #print("Выход")
             #bot.register_next_step_handler(message, main_menu)
@@ -389,11 +368,12 @@ def training_4(message):
             markup = types.ReplyKeyboardMarkup()
             btn_stop = types.KeyboardButton('Стоп')
             markup.row(btn_stop)
+            bot.send_message(message.chat.id, "Букву, на которую падает ударение, выдели Заглавной (бАнты) \nКогда решишь прекратить, нажми на клавиатуре или напиши сам слово Стоп")
             bot.send_message(message.chat.id, task_4[step][0], reply_markup=markup)
             step += 1
             bot.register_next_step_handler(message, training_4)
     elif (step > 0):
-        if ((message.text).lower() == "стоп" or message.text == "Стоп"):
+        if (message.text.lower() == "стоп" or message.text.strip() == "Стоп"):
             #main_menu(message)
             #print("Выход")
             #bot.register_next_step_handler(message, main_menu)
@@ -407,13 +387,14 @@ def training_4(message):
             answer_true = 0
             answer_false = 0
             bot.register_next_step_handler(message, on_click)
-        elif (message.text[1::] == task_4[step-1][1][1::]):
+        elif (message.text.strip()[1::] == task_4[step-1][1][1::]):
             bot.send_message(message.chat.id, "Верно!")
             answer_true += 1
             conn = sqlite3.connect('stats.db')
             cur = conn.cursor()
-            sqlite_select_query = f"""UPDATE Stats SET rights = rigths + 1 where user_id = {message.chat.id}"""
+            sqlite_select_query = f"""UPDATE Stats SET rights = rights + 1 where user_id = {message.chat.id}"""
             cur.execute(sqlite_select_query)
+            conn.commit()
             cur.close()
             conn.close()
             if (step >= len(task_4)):
@@ -445,6 +426,7 @@ def training_4(message):
             cur = conn.cursor()
             sqlite_select_query = f"""UPDATE Stats SET wrongs = wrongs + 1 where user_id = {message.chat.id}"""
             cur.execute(sqlite_select_query)
+            conn.commit()
             cur.close()
             conn.close()
             if (step >= len(task_4)):
@@ -476,7 +458,7 @@ def training(message):
     global answer_false
     global task_words
     if (step == 0):
-        if (message.text.lower() == "стоп" or message.text == "Стоп"):
+        if (message.text.lower() == "стоп" or message.text.strip() == "Стоп"):
             # main_menu(message)
             # print("Выход")
             # bot.register_next_step_handler(message, main_menu)
@@ -518,18 +500,32 @@ def training(message):
                 s2 = s2.replace("'", '')
                 s2 = s2.replace(',', '')
                 task_words.append([s1, s2])
-                print(s1)
-                print(s2)
-            print(task_words)
+                #print(s1)
+                #print(s2)
+            #print(task_words)
             random.shuffle(task_words)
             markup = types.ReplyKeyboardMarkup()
             btn_stop = types.KeyboardButton('Стоп')
             markup.row(btn_stop)
-            bot.send_message(message.chat.id, task_words[step][0], reply_markup=markup)
-            step += 1
-            bot.register_next_step_handler(message, training)
+            if (len(task_words) == 0):
+                bot.send_message(message.chat.id, "Список пуст")
+                step = 0
+                task_id = 0
+                markup = types.ReplyKeyboardMarkup()
+                btn1 = types.KeyboardButton('Тренировка')
+                btn2 = types.KeyboardButton('Моя статистика')
+                btn3 = types.KeyboardButton('Добавить слово')
+                markup.row(btn1, btn2, btn3)
+                bot.send_message(message.chat.id, "Что-то ещё?",
+                                 reply_markup=markup)
+                bot.register_next_step_handler(message, on_click)
+            else:
+                bot.send_message(message.chat.id, "Перепиши слово целиком, заменив _ на пропущенную букву")
+                bot.send_message(message.chat.id, task_words[step][0], reply_markup=markup)
+                step += 1
+                bot.register_next_step_handler(message, training)
     elif (step > 0):
-        if ((message.text).lower() == "стоп" or message.text == "Стоп"):
+        if (message.text.lower() == "стоп" or message.text.strip() == "Стоп"):
             # main_menu(message)
             # print("Выход")
             # bot.register_next_step_handler(message, main_menu)
@@ -547,13 +543,14 @@ def training(message):
             answer_true = 0
             answer_false = 0
             bot.register_next_step_handler(message, on_click)
-        elif (message.text[1::] == task_words[step - 1][1][1::]):
+        elif (message.text.strip()[1::] == task_words[step - 1][1][1::]):
             bot.send_message(message.chat.id, "Верно!")
             answer_true += 1
             conn = sqlite3.connect('stats.db')
             cur = conn.cursor()
             sqlite_select_query = f"""UPDATE Stats SET rights = rights + 1 where user_id = {message.chat.id}"""
             cur.execute(sqlite_select_query)
+            conn.commit()
             cur.close()
             conn.close()
             if (step >= len(task_words)):
@@ -585,6 +582,7 @@ def training(message):
             cur = conn.cursor()
             sqlite_select_query = f"""UPDATE Stats SET wrongs = wrongs + 1 where user_id = {message.chat.id}"""
             cur.execute(sqlite_select_query)
+            conn.commit()
             cur.close()
             conn.close()
             if (step >= len(task_words)):
@@ -618,13 +616,13 @@ def add_task(message):
         markup = types.ReplyKeyboardMarkup()
         btn_stop = types.KeyboardButton('Стоп')
         markup.row(btn_stop)
-        bot.send_message(message.chat.id, "На первой строке напиши слово с пропуском '_', на второй правильный ответ", reply_markup=markup)
+        bot.send_message(message.chat.id, "На первой строке напиши слово с пропуском '_', на второй правильный ответ \nКогда решишь прекратить, выбери на клавиатуре или напиши слово Стоп", reply_markup=markup)
         flag_add = True
         bot.register_next_step_handler(message, add_task)
     else:
-        print(message.text.split('\n'))
+        #print(message.text.split('\n'))
         new_pair = [x.lower() for x in message.text.strip().split('\n')]
-        if ((message.text).lower() == "стоп" or message.text == "Стоп"):
+        if (message.text.lower() == "стоп" or message.text.strip() == "Стоп"):
             # main_menu(message)
             # print("Выход")
             # bot.register_next_step_handler(message, main_menu)
@@ -648,7 +646,7 @@ def add_task(message):
             conn.close()
             word_was = False
             for _ in list_of_words:
-                print(_)
+                #print(_)
                 if (new_pair[0] in _):
                     word_was = True
                     break
@@ -674,7 +672,7 @@ def add_task(message):
 @bot.message_handler()
 def on_click(message):
     #print(message.text)
-    if message.text == 'Тренировка':
+    if message.text.strip() == 'Тренировка' or message.text.lower() == "тренировка":
         markup = types.ReplyKeyboardMarkup()
         btn_task4 = types.KeyboardButton('4')
         btn_task9 = types.KeyboardButton('9')
@@ -687,22 +685,36 @@ def on_click(message):
         markup.row(btn_task4, btn_task9, btn_task10, btn_task11, btn_task12, btn_task13, btn_task14, btn_task15)
         bot.send_message(message.chat.id, f'Каким заданием хочешь заняться?', reply_markup=markup)
         bot.register_next_step_handler(message, on_click_task)
-    elif message.text == 'Моя статистика':
+    elif message.text.strip() == 'Моя статистика' or message.text.lower() == 'моя статистика':
         conn = sqlite3.connect('stats.db')
         cur = conn.cursor()
         sqlite_select_query = f"""SELECT rights from Stats where user_id = {message.chat.id}"""
         cur.execute(sqlite_select_query)
-        right = cur.fetchall()
+        right = str(cur.fetchall()[0])
         sqlite_select_query = f"""SELECT wrongs from Stats where user_id = {message.chat.id}"""
         cur.execute(sqlite_select_query)
-        wrong = cur.fetchall()
-        print(right)
-        print(wrong)
+        wrong = str(cur.fetchall()[0])
+        right = right.replace('(', '')
+        right = right.replace(')', '')
+        right = right.replace("'", '')
+        right = right.replace(',', '')
+        wrong = wrong.replace('(', '')
+        wrong = wrong.replace(')', '')
+        wrong = wrong.replace("'", '')
+        wrong = wrong.replace(',', '')
+        #print(right)
+        #print(wrong)
+        cor = int(right)
+        uncor = int(wrong)
         cur.close()
         conn.close()
-        bot.send_message(message.chat.id,
-                         f'Ты сделал верно {right} из {right + wrong} заданий ({math.ceil(right/(right+wrong)*100)}%). Что-то ещё?')
-    elif message.text == 'Добавить слово':
+        if (cor+uncor == 0):
+            bot.send_message(message.chat.id, "Ты пока не выполнил ни одного задания :(")
+        else:
+            bot.send_message(message.chat.id,
+                         f'Ты сделал верно {cor} из {cor + uncor} заданий ({math.ceil(cor/(cor+uncor)*100)}%). Что-то ещё?')
+        bot.register_next_step_handler(message, on_click_task_add)
+    elif message.text.strip() == 'Добавить слово' or message.text.lower() == 'добавить слово':
         markup = types.ReplyKeyboardMarkup()
         btn_task9 = types.KeyboardButton('9')
         btn_task10 = types.KeyboardButton('10')
@@ -717,19 +729,18 @@ def on_click(message):
 
 def on_click_task(message):
     global task_id
-    if (message.text == '4'):
+    if (message.text.strip() == '4'):
         #print('*')
         training_4(message)
     else:
-        task_id = int(message.text)
+        task_id = int(message.text.strip())
         training(message)
 
 
 def on_click_task_add(message):
     global task_id
-    task_id = int(message.text)
+    task_id = int(message.text.strip())
     add_task(message)
-
 
 
 bot.polling(none_stop=True)
