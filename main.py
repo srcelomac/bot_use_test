@@ -1,3 +1,4 @@
+import os
 import webbrowser
 import telebot
 import random
@@ -8,19 +9,16 @@ import string
 import sqlite3
 import math
 
-bot = telebot.TeleBot('7196357802:AAHsMTbnuQiDM4ahfAtZihk8gU83mxPP58M')
+tg_key = os.environ["tg_key"]
+bot = telebot.TeleBot(str(tg_key))
 
-yandex_cloud_catalog = "b1g4ptm2o8gu4v21foc5"
-yandex_api_key = "AQVN38b3z0pR8frNt3gK0HZ6ynGLVQ0L1p_1gajc"
+yandex_catalog = os.environ["yandex_catalog"]
+yandex_cloud_catalog = str(yandex_catalog)
+yandex_key = os.environ["yandex_key"]
+yandex_api_key = str(yandex_key)
 yandex_gpt_model = "yandexgpt"
 system_prompt = "Придумай очень короткую ассоциацию, которую легко запомнить, например: дефИс - денИс. Ассоциацию ты должен придумать для того, чтобы ученик запомнил ударение в присланном тебе слове (правильное ударение указано заглавное буквой). В ответ напиши только самое предложение с ассоцацией, также тебе нельзя использовать никакой форматирование, ударение выделяй заглавной буквой."
 
-
-'''
-yandex_cloud_catalog = "b1g4ptm2o8gu4v21foc5"
-yandex_gpt_api_key = "AQVN38b3z0pR8frNt3gK0HZ6ynGLVQ0L1p_1gajc"
-yandex_gpt_model = "yandexgpt-lite"
-'''
 
 conn = sqlite3.connect('tasks.db')
 cur = conn.cursor()
@@ -774,7 +772,5 @@ def on_click_task_add(message):
         add_task(message)
     except:
         print("ERROR")
-
-
 
 bot.polling(none_stop=True)
